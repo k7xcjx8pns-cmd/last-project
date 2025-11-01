@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Моя библиотека</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Фон с частицами -->
+  <div id="particles-js"></div>
+
+  <header>
+    <h1>📚 Моя библиотека</h1>
+    <div class="search-bar">
+      <input type="text" id="searchInput" placeholder="🔍 Найти книгу по названию...">
+      <button class="fancy-btn default" onclick="searchBook()">Поиск</button>
+    </div>
+    <div class="filters">
+      <button class="fancy-btn default" onclick="setFilter('all')">Все</button>
+      <button class="fancy-btn read" onclick="setFilter('read')">Прочитанные</button>
+      <button class="fancy-btn default" onclick="setFilter('unread')">Не прочитанные</button>
+      <button class="fancy-btn add" onclick="setFilter('favorite')">Избранное</button>
+      <button class="fancy-btn default" onclick="setFilter('rating')">По рейтингу</button>
+    </div>
+  </header>
+
+  <main>
+    <div id="library" class="library"></div>
+  </main>
+
+  <div id="searchResultsModal" class="modal hidden">
+    <div class="modal-content">
+      <h2>Результаты поиска</h2>
+      <div id="resultsContainer"></div>
+      <button class="fancy-btn delete" onclick="closeModal()">Закрыть</button>
+    </div>
+  </div>
+
+  <!-- Библиотека -->
+  <script src="script.js"></script>
+
+  <!-- jQuery и particles.js -->
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"></script>
+  <script src="particles-config.js"></script>
+</body>
+</html>
