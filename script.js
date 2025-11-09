@@ -1,6 +1,10 @@
 let library = [];
 let currentFilter = 'all';
 
+let booksPerLoad = 3;
+let loadedBooks = 0;
+let filteredLibrary = [];
+
 // ================= Поиск книг =================
 async function searchBook() {
   const query = document.getElementById("searchInput").value.trim();
@@ -39,7 +43,6 @@ async function searchBook() {
       btn.className = "fancy-btn add";
       btn.textContent = "Добавить";
 
-      // Сохраняем данные в dataset
       btn.dataset.title = title;
       btn.dataset.authors = authors;
       btn.dataset.image = imageUrl;
@@ -47,7 +50,7 @@ async function searchBook() {
 
       btn.addEventListener("click", () => {
         library.push({
-          key: item.id, // Google Books id
+          key: item.id,
           title: btn.dataset.title,
           author: btn.dataset.authors,
           desc: btn.dataset.desc,
@@ -55,9 +58,9 @@ async function searchBook() {
           read: false,
           favorite: false,
           rating: 0,
-          isExpanded: false // Track expanded state
+          isExpanded: false
         });
-        renderLibrary();
+        renderLibrary(true);
         closeModal();
       });
 
@@ -73,153 +76,117 @@ async function searchBook() {
   }
 }
 
-// ================= Добавление книги =================
-async function addBookFromInternet(workKey, imageUrl, fallbackTitle, fallbackAuthors) {
-  try {
-    let title = fallbackTitle;
-    let authors = fallbackAuthors;
-    let description = "Описание отсутствует";
-
-    // Если есть ключ книги, пробуем получить данные с OpenLibrary
-    if (workKey) {
-      try {
-        const response = await fetch(`https://openlibrary.org${workKey}.json`);
-        const workData = await response.json();
-
-        title = workData.title || title;
-        description = workData.description ? 
-          (typeof workData.description === 'string' ? workData.description : workData.description.value) 
-          : description;
-
-        if (workData.authors && workData.authors.length > 0) {
-          authors = await fetchAuthors(workData.authors);
-        }
-
-        // Проверка обложки
-        if (workData.covers && workData.covers.length > 0) {
-          imageUrl = `https://covers.openlibrary.org/b/id/${workData.covers[0]}-L.jpg`;
-        }
-
-      } catch (err) {
-        console.warn("Не удалось получить полное описание книги, используем данные поиска");
-      }
-    }
-
-    // На всякий случай заменяем спецсимволы в imageUrl
-    if (!imageUrl || imageUrl.includes("placeholder")) {
-      imageUrl = "https://via.placeholder.com/150x220?text=Нет+обложки";
-    }
-
-    library.push({
-      key: workKey,
-      title,
-      author: authors,
-      desc: description,
-      image: imageUrl,
-      read: false,
-      favorite: false,
-      rating: 0,
-      isExpanded: false // Track expanded state
-    });
-
-    renderLibrary();
-    closeModal();
-  } catch (err) {
-    console.error(err);
-    alert("Не удалось добавить книгу");
-  }
-}
-
-// ================= Получение авторов =================
-async function fetchAuthors(authorsArray) {
-  const names = [];
-  for (const a of authorsArray) {
-    try {
-      const res = await fetch(`https://openlibrary.org${a.author.key}.json`);
-      const data = await res.json();
-      names.push(data.name);
-    } catch(err) {
-      names.push("Неизвестный автор");
-    }
-  }
-  return names.join(", ");
-}
-
-// ================= Закрыть модалку =================
-function closeModal() {
-  document.getElementById("searchResultsModal").classList.add("hidden");
-}
-
-// ================= Рендер библиотеки =================
-function renderLibrary() {
+// ================= Рендер библиотеки с ленивой подгрузкой =================
+function renderLibrary(reset=false) {
   const libraryDiv = document.getElementById("library");
-  libraryDiv.innerHTML = "";
+  
+  if(reset) loadedBooks = 0; // сброс при фильтре или добавлении
 
-  let filteredLibrary = [...library];
+  // фильтрация
+  filteredLibrary = [...library];
   if(currentFilter==='read') filteredLibrary = filteredLibrary.filter(b=>b.read);
   if(currentFilter==='unread') filteredLibrary = filteredLibrary.filter(b=>!b.read);
   if(currentFilter==='favorite') filteredLibrary = filteredLibrary.filter(b=>b.favorite);
   if(currentFilter==='rating') filteredLibrary.sort((a,b)=>b.rating - a.rating);
 
-  filteredLibrary.forEach((book, index)=>{
-    const bookDiv = document.createElement("div");
-    bookDiv.className = "book";
+  // очистка контейнера и индикатор загрузки
+  if(reset) libraryDiv.innerHTML = "";
 
-    // Звёздочки рейтинга
-    const starsDiv = document.createElement("div");
-    starsDiv.className = "stars";
-    for(let i=1; i<=5; i++){
-      const star = document.createElement("span");
-      star.className = `star ${book.rating>=i?'active':''}`;
-      star.textContent = "★";
-      star.addEventListener("click", () => setRating(index, i));
-      starsDiv.appendChild(star);
-    }
-
-    // Кнопки управления
-    const readBtn = document.createElement("button");
-    readBtn.className = "fancy-btn read";
-    readBtn.textContent = book.read ? "Прочитано" : "Не прочитано";
-    readBtn.addEventListener("click", () => toggleRead(index));
-
-    const favBtn = document.createElement("button");
-    favBtn.className = "fancy-btn add";
-    favBtn.textContent = book.favorite ? "❤️ В избранном" : "🤍 В избранное";
-    favBtn.addEventListener("click", () => toggleFavorite(index));
-
-    const delBtn = document.createElement("button");
-    delBtn.className = "fancy-btn delete";
-    delBtn.textContent = "Удалить";
-    delBtn.addEventListener("click", () => removeBook(index));
-
-    // Описание с возможностью раскрытия
-    const descDiv = document.createElement("div");
-    descDiv.className = `desc ${book.isExpanded ? 'expanded' : ''}`;
-    descDiv.textContent = book.desc;
-    descDiv.addEventListener("click", () => {
-      book.isExpanded = !book.isExpanded;
-      renderLibrary();
-    });
-
-    bookDiv.innerHTML = `
-      <img src="${book.image}" alt="${book.title}">
-      <h3>${book.title}</h3>
-      <p>${book.author}</p>
-    `;
-
-    bookDiv.appendChild(descDiv);
-    bookDiv.appendChild(starsDiv);
-    bookDiv.appendChild(readBtn);
-    bookDiv.appendChild(favBtn);
-    bookDiv.appendChild(delBtn);
-
-    libraryDiv.appendChild(bookDiv);
-  });
+  loadNextBatch();
 }
 
-// ================= Управление книгой =================
-function toggleRead(index){ library[index].read=!library[index].read; renderLibrary(); }
-function toggleFavorite(index){ library[index].favorite=!library[index].favorite; renderLibrary(); }
-function setRating(index,rating){ library[index].rating=rating; renderLibrary(); }
-function removeBook(index){ library.splice(index,1); renderLibrary(); }
-function setFilter(filter){ currentFilter=filter; renderLibrary(); }
+function loadNextBatch() {
+  const libraryDiv = document.getElementById("library");
+  const loader = document.querySelector(".loader") || createLoader();
+  loader.style.display = "block";
+
+  setTimeout(() => {
+    const nextBooks = filteredLibrary.slice(loadedBooks, loadedBooks + booksPerLoad);
+    nextBooks.forEach((book,index)=>{
+      const bookDiv = document.createElement("div");
+      bookDiv.className = "book";
+
+      // Звёздочки рейтинга
+      const starsDiv = document.createElement("div");
+      starsDiv.className = "stars";
+      for(let i=1; i<=5; i++){
+        const star = document.createElement("span");
+        star.className = star ${book.rating>=i?'active':''};
+        star.textContent = "★";
+        star.addEventListener("click", () => {
+          book.rating=i;
+          renderLibrary(true);
+        });
+        starsDiv.appendChild(star);
+      }
+
+      // Кнопки управления
+      const readBtn = document.
+createElement("button");
+      readBtn.className = "fancy-btn read";
+      readBtn.textContent = book.read ? "Прочитано" : "Не прочитано";
+      readBtn.addEventListener("click", () => { book.read=!book.read; renderLibrary(true); });
+
+      const favBtn = document.createElement("button");
+      favBtn.className = "fancy-btn add";
+      favBtn.textContent = book.favorite ? "❤️ В избранном" : "🤍 В избранное";
+      favBtn.addEventListener("click", () => { book.favorite=!book.favorite; renderLibrary(true); });
+
+      const delBtn = document.createElement("button");
+      delBtn.className = "fancy-btn delete";
+      delBtn.textContent = "Удалить";
+      delBtn.addEventListener("click", () => {
+        const idx = library.indexOf(book);
+        if(idx>=0) library.splice(idx,1);
+        renderLibrary(true);
+      });
+
+      // Описание книги
+      const descDiv = document.createElement("div");
+      descDiv.className = desc ${book.isExpanded ? 'expanded' : ''};
+      descDiv.textContent = book.desc;
+      descDiv.addEventListener("click", () => { book.isExpanded=!book.isExpanded; renderLibrary(true); });
+
+      bookDiv.innerHTML = `
+        <img src="${book.image}" alt="${book.title}">
+        <h3>${book.title}</h3>
+        <p>${book.author}</p>
+      `;
+
+      bookDiv.appendChild(descDiv);
+      bookDiv.appendChild(starsDiv);
+      bookDiv.appendChild(readBtn);
+      bookDiv.appendChild(favBtn);
+      bookDiv.appendChild(delBtn);
+
+      libraryDiv.appendChild(bookDiv);
+    });
+
+    loadedBooks += booksPerLoad;
+    loader.style.display = "none";
+  }, 300);
+}
+
+function createLoader() {
+  const loader = document.createElement("div");
+  loader.className = "loader";
+  loader.textContent = "Загрузка...";
+  document.getElementById("library").parentNode.insertBefore(loader, document.getElementById("library").nextSibling);
+  return loader;
+}
+
+// ================= Фильтры =================
+function setFilter(filter){ currentFilter=filter; renderLibrary(true); }
+
+// ================= Модалка =================
+function closeModal(){ document.getElementById("searchResultsModal").classList.add("hidden"); }
+
+// ================= Ленивый скролл =================
+window.addEventListener("scroll", () => {
+  if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 10) {
+    if(loadedBooks < filteredLibrary.length) loadNextBatch();
+  }
+});
+
+// ================= Инициализация =================
+renderLibrary(true);
